@@ -1,0 +1,262 @@
+{
+  "version": 1,
+  "camera": {
+    "type": "basis",
+    "origin": {
+      "x": 3,
+      "y": 2,
+      "z": 2
+    },
+    "right": {
+      "x": 1,
+      "y": 0,
+      "z": 0
+    },
+    "up": {
+      "x": 0,
+      "y": 1,
+      "z": 0
+    },
+    "forward": {
+      "x": 0,
+      "y": 0,
+      "z": -1
+    },
+    "m": 2.7474774194546225,
+    "focus": {
+      "focalPoint": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "apertureRadius": 0.01
+    }
+  },
+  "sampler": {
+    "type": "default",
+    "firstHitSamples": 4,
+    "maxBounces": 3,
+    "directLighting": true,
+    "softShadows": true,
+    "lightMode": "all",
+    "specularMode": "first"
+  },
+  "background": {
+    "texture": "tex-env",
+    "textureAngle": 0.5
+  },
+  "materials": [
+    {
+      "id": "mat-floor",
+      "color": {
+        "r": 0.8,
+        "g": 0.8,
+        "b": 0.7
+      },
+      "texture": "tex-checker",
+      "bumpMultiplier": 1,
+      "emittance": 0,
+      "index": 1,
+      "gloss": 0,
+      "tint": 0,
+      "reflectivity": -1,
+      "transparent": false
+    },
+    {
+      "id": "mat-light",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1
+      },
+      "bumpMultiplier": 1,
+      "emittance": 50,
+      "index": 1,
+      "gloss": 0,
+      "tint": 0,
+      "reflectivity": -1,
+      "transparent": false
+    }
+  ],
+  "textures": [
+    {
+      "id": "tex-env",
+      "path": "env.png"
+    },
+    {
+      "id": "tex-checker",
+      "path": "checker.png",
+      "pow": 0.45454545454545453
+    }
+  ],
+  "meshes": [
+    {
+      "id": "mesh-file",
+      "path": "tri.obj",
+      "material": "mat-floor"
+    },
+    {
+      "id": "mesh-inline",
+      "triangles": [
+        {
+          "v1": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "v2": {
+            "x": 1,
+            "y": 0,
+            "z": 0
+          },
+          "v3": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          },
+          "n1": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          },
+          "n2": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          },
+          "n3": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          },
+          "t1": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "t2": {
+            "x": 1,
+            "y": 0,
+            "z": 0
+          },
+          "t3": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          },
+          "material": "mat-floor"
+        }
+      ]
+    }
+  ],
+  "shapes": [
+    {
+      "id": "floor",
+      "type": "plane",
+      "material": "mat-floor",
+      "point": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "normal": {
+        "x": 0,
+        "y": 0,
+        "z": 1
+      }
+    },
+    {
+      "id": "ball",
+      "type": "sphere",
+      "material": "mat-floor",
+      "center": {
+        "x": 0,
+        "y": 0,
+        "z": 1
+      },
+      "radius": 1
+    },
+    {
+      "type": "cube",
+      "material": "mat-floor",
+      "min": {
+        "x": -2,
+        "y": -2,
+        "z": 1
+      },
+      "max": {
+        "x": -1,
+        "y": -1,
+        "z": 2
+      }
+    },
+    {
+      "type": "cylinder",
+      "material": "mat-floor",
+      "radius": 0.5,
+      "z0": 0,
+      "z1": 2
+    },
+    {
+      "type": "mesh",
+      "material": "mat-floor",
+      "mesh": "mesh-file",
+      "matrix": [
+        0.8660254037844387,
+        0.49999999999999994,
+        0,
+        0,
+        -0.49999999999999994,
+        0.8660254037844387,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "type": "mesh",
+      "material": "mat-floor",
+      "mesh": "mesh-inline"
+    },
+    {
+      "id": "lamp",
+      "type": "sphere",
+      "material": "mat-light",
+      "center": {
+        "x": 3,
+        "y": 3,
+        "z": 5
+      },
+      "radius": 0.7
+    },
+    {
+      "type": "reference",
+      "ref": "ball",
+      "matrix": [
+        0.8660254037844387,
+        0.49999999999999994,
+        0,
+        0,
+        -0.49999999999999994,
+        0.8660254037844387,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    }
+  ]
+}
