@@ -50,16 +50,21 @@ type DefaultSampler struct {
 }
 
 func (s *DefaultSampler) Sample(scene *Scene, ray Ray, rnd *rand.Rand) Color {
-	return s.sample(scene, ray, true, s.FirstHitSamples, 0, rnd)
+	return s.sample(scene, ray, true, s.FirstHitSamples, 0, false, 0, rnd)
 }
 
-func (s *DefaultSampler) sample(scene *Scene, ray Ray, emission bool, samples, depth int, rnd *rand.Rand) Color {
+// specular indicates whether the incoming ray was produced by a
+// perfectly specular (reflection/refraction) event, in which case the BSDF
+// sampling density is a delta and environment MIS weights must collapse to
+// one. bsdfPDF is the solid-angle density the current path assigned to the
+// incoming ray; it is zero for primary rays and delta specular rays.
+func (s *DefaultSampler) sample(scene *Scene, ray Ray, emission bool, samples, depth int, specular bool, bsdfPDF float64, rnd *rand.Rand) Color {
 	if depth > s.MaxBounces {
 		return Black
 	}
 	hit := scene.Intersect(ray)
 	if !hit.Ok() {
-		return s.sampleEnvironment(scene, ray)
+		return s.sampleEnvironmentPath(scene, ray, specular, bsdfPDF)
 	}
 	info := hit.Info(ray)
 	material := info.Material
@@ -89,24 +94,120 @@ func (s *DefaultSampler) sample(scene *Scene, ray Ray, emission bool, samples, d
 					p = 1
 				}
 				if p > 0 && reflected {
-					// specular
-					indirect := s.sample(scene, newRay, reflected, 1, depth+1, rnd)
+					// specular: perfect reflection/refraction is a delta
+					// event, so the BSDF pdf is not a finite density and
+					// environment MIS on the escape branch weights to one.
+					indirect := s.sample(scene, newRay, reflected, 1, depth+1, true, 0, rnd)
 					tinted := indirect.Mix(material.Color.Mul(indirect), material.Tint)
 					result = result.Add(tinted.MulScalar(p))
 				}
 				if p > 0 && !reflected {
-					// diffuse
-					indirect := s.sample(scene, newRay, reflected, 1, depth+1, rnd)
+					// diffuse: WeightedBounce is cosine-weighted, so the
+					// solid-angle BSDF density is cos(theta)/pi.
+					cosTheta := info.Ray.Direction.Dot(newRay.Direction)
+					pdf := math.Max(0, cosTheta) / math.Pi
+					indirect := s.sample(scene, newRay, reflected, 1, depth+1, false, pdf, rnd)
 					direct := Black
 					if s.DirectLighting {
 						direct = s.sampleLights(scene, info.Ray, rnd)
 					}
-					result = result.Add(material.Color.Mul(direct.Add(indirect)).MulScalar(p))
+					// next-event estimation of the environment map; this
+					// only exists when the scene enabled EnvSampling and a
+					// valid distribution could be built.
+					envDirect := s.sampleEnvironmentDirect(scene, info.Ray, rnd)
+					result = result.Add(material.Color.Mul(direct.Add(envDirect).Add(indirect)).MulScalar(p))
 				}
 			}
 		}
 	}
 	return result.DivScalar(float64(n * n))
+}
+
+// envEnabled reports whether environment importance sampling can be used.
+func (s *DefaultSampler) envEnabled(scene *Scene) bool {
+	if !scene.EnvSampling || scene.Texture == nil {
+		return false
+	}
+	return scene.EnvDistribution().Valid()
+}
+
+// powerHeuristic is the canonical balance/weight heuristic used to combine
+// two non-delta sampling techniques (here BSDF sampling and environment
+// map sampling).
+func powerHeuristic(pdfA, pdfB float64) float64 {
+	if pdfA <= 0 {
+		return 0
+	}
+	if pdfB <= 0 {
+		return 1
+	}
+	a2 := pdfA * pdfA
+	return a2 / (a2 + pdfB*pdfB)
+}
+
+// sampleEnvironmentPath evaluates an escaped ray against the environment.
+// With environment importance sampling enabled, diffuse escape paths are
+// combined with the environment next-event estimator via the power
+// heuristic; delta specular escapes keep full weight because their BSDF
+// density is not representable as a finite pdf.
+func (s *DefaultSampler) sampleEnvironmentPath(scene *Scene, ray Ray, specular bool, bsdfPDF float64) Color {
+	color := s.sampleEnvironment(scene, ray)
+	if !s.envEnabled(scene) || specular {
+		return color
+	}
+	envPDF := scene.EnvDistribution().PDF(ray.Direction)
+	if envPDF <= 0 {
+		// direction outside the supported distribution (e.g. black texel):
+		// only the BSDF technique can have generated it, keep full weight.
+		return color
+	}
+	if bsdfPDF <= 0 {
+		return color
+	}
+	return color.MulScalar(powerHeuristic(bsdfPDF, envPDF))
+}
+
+// sampleEnvironmentDirect performs next-event estimation toward the
+// environment: it draws an importance-sampled direction, checks that no
+// geometry occludes it, and returns the weighted radiance including the
+// cosine term, BSDF albedo being applied by the caller like any other
+// direct light.
+func (s *DefaultSampler) sampleEnvironmentDirect(scene *Scene, n Ray, rnd *rand.Rand) Color {
+	if !s.envEnabled(scene) {
+		return Black
+	}
+	dist := scene.EnvDistribution()
+	dir, envPDF, _, _ := dist.Sample(rnd)
+	if envPDF <= 0 || !isFinite(envPDF) {
+		return Black
+	}
+	cosTheta := n.Direction.Dot(dir)
+	if cosTheta <= 0 {
+		return Black
+	}
+	// offset along the normal like the refraction path does, to avoid
+	// re-intersecting the emitting surface at t ~ 0
+	origin := n.Origin.Add(n.Direction.MulScalar(1e-4))
+	shadowRay := Ray{origin, dir}
+	if hit := scene.Intersect(shadowRay); hit.Ok() {
+		return Black
+	}
+	u, v := envDirectionToUV(dir, dist.textureAngle)
+	le := scene.Texture.Sample(u, v)
+	if !isFiniteColor(le) {
+		return Black
+	}
+	// NEE for the irradiance integral L(w) cos(theta) dw, estimated as
+	// L cos / pdf_env. (The 1/pi Lambertian factor lives in the surface
+	// albedo/BSDF applied by the caller and in bsdfPDF used for the MIS
+	// weight; it must not be folded into this light estimator.)
+	bsdfPDF := cosTheta / math.Pi
+	weight := powerHeuristic(envPDF, bsdfPDF)
+	return le.MulScalar(cosTheta * weight / envPDF)
+}
+
+func isFiniteColor(c Color) bool {
+	return isFinite(c.R) && isFinite(c.G) && isFinite(c.B)
 }
 
 func (s *DefaultSampler) sampleEnvironment(scene *Scene, ray Ray) Color {

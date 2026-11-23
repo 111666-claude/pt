@@ -18,6 +18,7 @@ This is a CPU-only, unidirectional [path tracing](http://en.wikipedia.org/wiki/P
 * Supports configurable depth of field
 * Supports iterative rendering
 * Supports adaptive sampling and firefly reduction
+* Supports environment map (HDRI) importance sampling with MIS
 * Uses k-d trees to accelerate ray intersection tests
 * Uses all CPU cores in parallel
 * 100% pure Go with no dependencies besides the standard library
@@ -96,6 +97,22 @@ Here are some of the options that are utilized to achieve this improvement:
 - **firefly reduction** - very heavily sample pixels with very high variance
 
 Combining these features results in cleaner, faster renders. The specific parameters that should be used depend greatly on the scene being rendered.
+
+### Environment Map Importance Sampling
+
+When a scene is lit by an HDR environment texture (`scene.Texture`), bright features such as the sun often cover only a tiny fraction of the sphere. Uniform escape-ray sampling rarely hits them, so noise converges slowly. Setting `scene.EnvSampling = true` fixes this:
+
+- a reusable two-dimensional discrete distribution is built once from the texture's luminance, weighted by the exact solid angle of every latitude/longitude texel;
+- diffuse paths get a next-event estimate toward the environment, combined with BSDF sampling using the multiple-importance-sampling power heuristic, while specular (delta) escape rays keep their full weight;
+- the solid-angle probability density is returned alongside every sample, and the seam, texture rotation (`TextureAngle`), polar rows and degenerate (empty/black/non-finite/extreme-aspect) textures all have explicit safe fallbacks.
+
+The feature is opt-in and defaults to off, so existing scenes keep their original behavior.
+
+```go
+scene := Scene{}
+scene.Texture = GetTexture("examples/courtyard_ccby/courtyard_8k.png")
+scene.EnvSampling = true // build & use the environment importance distribution
+```
 
 ### Links
 

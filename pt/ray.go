@@ -26,6 +26,9 @@ func (n Ray) Reflectance(i Ray, n1, n2 float64) float64 {
 }
 
 func (r Ray) WeightedBounce(u, v float64, rnd *rand.Rand) Ray {
+	// Cosine-weighted sampling over the hemisphere around r.Direction.
+	// The resulting solid-angle probability density is cos(theta)/pi,
+	// which is what the environment map MIS weights rely on.
 	radius := math.Sqrt(u)
 	theta := 2 * math.Pi * v
 	s := r.Direction.Cross(RandomUnitVector(rnd)).Normalize()
@@ -34,7 +37,7 @@ func (r Ray) WeightedBounce(u, v float64, rnd *rand.Rand) Ray {
 	d = d.Add(s.MulScalar(radius * math.Cos(theta)))
 	d = d.Add(t.MulScalar(radius * math.Sin(theta)))
 	d = d.Add(r.Direction.MulScalar(math.Sqrt(1 - u)))
-	return Ray{r.Origin, d}
+	return Ray{r.Origin, d.Normalize()}
 }
 
 func (r Ray) ConeBounce(theta, u, v float64, rnd *rand.Rand) Ray {
