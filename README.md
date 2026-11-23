@@ -97,6 +97,23 @@ Here are some of the options that are utilized to achieve this improvement:
 
 Combining these features results in cleaner, faster renders. The specific parameters that should be used depend greatly on the scene being rendered.
 
+### Microfacet GGX Materials
+
+In addition to the legacy `Gloss` cone model, materials support a physically based microfacet BRDF based on the GGX (Trowbridge-Reitz) normal distribution with the Smith GGX masking/shadowing term and Schlick Fresnel. Set `Roughness` (linear, `0` = perfect mirror, `1` = fully rough) and `Metalness` (`0` = dielectric, `1` = conductor); a negative `Roughness` (the default) keeps the legacy model, so existing scenes are unchanged.
+
+```go
+// metallic: color is the conductor's base reflectance
+metal := MetalMaterial(HexColor(0xC0C0C0), 0.25)
+
+// dielectric: Fresnel reflectance is derived from the refractive index
+glass := DielectricMaterial(HexColor(0x4060A0), 1.5, 0.1)
+
+// fully configurable: color, index, roughness, metalness
+custom := GGXMaterial(HexColor(0x888888), 1.5, 0.4, 0.5)
+```
+
+Roughness zero degenerates to a stable exact specular reflection. Parameters are validated and clamped on every shading event (out-of-range, non-finite, grazing-angle, abnormal refractive index and back-facing normal inputs all yield finite, non-negative sampling weights). See `examples/ggx.go`.
+
 ### Links
 
 Here are some resources that I have found useful.

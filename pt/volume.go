@@ -127,7 +127,7 @@ func (v *Volume) UV(p Vector) Vector {
 
 func (v *Volume) MaterialAt(p Vector) Material {
 	be := 1e9
-	bm := Material{}
+	bm := Material{Roughness: -1}
 	s := v.Sample(p.X, p.Y, p.Z)
 	for _, window := range v.Windows {
 		if s >= window.Lo && s <= window.Hi {

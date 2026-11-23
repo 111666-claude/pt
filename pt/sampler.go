@@ -85,7 +85,10 @@ func (s *DefaultSampler) sample(scene *Scene, ray Ray, emission bool, samples, d
 				fu := (float64(u) + rnd.Float64()) / float64(n)
 				fv := (float64(v) + rnd.Float64()) / float64(n)
 				newRay, reflected, p := ray.Bounce(&info, fu, fv, mode, rnd)
-				if mode == BounceTypeAny {
+				if mode == BounceTypeAny && p > 0 {
+					// Legacy probability-partitioned sampling takes one
+					// branch per bounce and weights it as 1. A zero weight
+					// (conductor absorption) is preserved so the ray ends.
 					p = 1
 				}
 				if p > 0 && reflected {

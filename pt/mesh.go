@@ -63,7 +63,7 @@ func (m *Mesh) UV(p Vector) Vector {
 }
 
 func (m *Mesh) MaterialAt(p Vector) Material {
-	return Material{} // not implemented
+	return Material{Roughness: -1} // not implemented
 }
 
 func (m *Mesh) NormalAt(p Vector) Vector {
