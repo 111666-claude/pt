@@ -64,6 +64,11 @@ func (a Box) Intersects(b Box) bool {
 }
 
 func (b *Box) Intersect(r Ray) (float64, float64) {
+	// An inverted box (Min > Max on any axis) is the canonical empty box:
+	// every ray misses it.
+	if b.Min.X > b.Max.X || b.Min.Y > b.Max.Y || b.Min.Z > b.Max.Z {
+		return math.Inf(1), math.Inf(-1)
+	}
 	x1 := (b.Min.X - r.Origin.X) / r.Direction.X
 	y1 := (b.Min.Y - r.Origin.Y) / r.Direction.Y
 	z1 := (b.Min.Z - r.Origin.Z) / r.Direction.Z
