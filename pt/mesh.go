@@ -28,8 +28,11 @@ func (m *Mesh) Copy() *Mesh {
 
 func (m *Mesh) Compile() {
 	if m.tree == nil {
+		// Build stable tangent bases before any goroutine reads NormalAt.
+		// ensureTangents leaves pre-built frames (e.g. SmoothTangents) intact.
 		shapes := make([]Shape, len(m.Triangles))
 		for i, triangle := range m.Triangles {
+			triangle.ensureTangents()
 			shapes[i] = triangle
 		}
 		m.tree = NewTree(shapes)
@@ -133,6 +136,9 @@ func (m *Mesh) FitInside(box Box, anchor Vector) {
 }
 
 func (m *Mesh) Transform(matrix Matrix) {
+	// A negative-determinant transform mirrors the mesh, which reverses the
+	// winding order and therefore the handedness of every tangent frame.
+	flip := matrix.Determinant() < 0
 	for _, t := range m.Triangles {
 		t.V1 = matrix.MulPosition(t.V1)
 		t.V2 = matrix.MulPosition(t.V2)
@@ -140,6 +146,14 @@ func (m *Mesh) Transform(matrix Matrix) {
 		t.N1 = matrix.MulDirection(t.N1)
 		t.N2 = matrix.MulDirection(t.N2)
 		t.N3 = matrix.MulDirection(t.N3)
+		if t.tangentsBuilt {
+			t.Tan1 = matrix.MulDirection(t.Tan1)
+			t.Tan2 = matrix.MulDirection(t.Tan2)
+			t.Tan3 = matrix.MulDirection(t.Tan3)
+			if flip {
+				t.W1, t.W2, t.W3 = -t.W1, -t.W2, -t.W3
+			}
+		}
 	}
 	m.dirty()
 }
