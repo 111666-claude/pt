@@ -18,6 +18,7 @@ This is a CPU-only, unidirectional [path tracing](http://en.wikipedia.org/wiki/P
 * Supports configurable depth of field
 * Supports iterative rendering
 * Supports adaptive sampling and firefly reduction
+* Supports configurable tone mapping (exposure, Reinhard, ACES) with gamma-preserving defaults
 * Uses k-d trees to accelerate ray intersection tests
 * Uses all CPU cores in parallel
 * 100% pure Go with no dependencies besides the standard library
@@ -80,6 +81,31 @@ func main() {
 ```
 
 ![Hello World](http://i.imgur.com/FyAmeMx.png)
+
+### Tone Mapping
+
+HDR scenes accumulate linear radiance values that can exceed 1.0. Tone mapping compresses that range for display, letting you retain both shadow detail and highlight layers instead of choosing one. Configure the `Renderer.ToneMapping` field before rendering; the default reproduces the original gamma-only output exactly, so existing renders are unchanged.
+
+```go
+// gamma-only, the original pt behavior (also the zero-value default)
+renderer.ToneMapping = NewToneMapping()
+
+// linear exposure gain followed by a mapping curve and gamma encoding
+renderer.ToneMapping = ToneMapping{ReinhardToneMapper, 1.5}
+renderer.ToneMapping = ToneMapping{ACESToneMapper, 1.0}
+```
+
+- **Exposure** is a finite, positive linear multiplier applied before the curve. Non-finite or non-positive values fall back to 1.
+- **Reinhard** applies `x / (1 + x)`: a soft rolloff that never hard-clips.
+- **ACES** applies the filmic ACES approximation (the Hill fit used by three.js's `ACESFilmicToneMapping`): a contrasty S-curve with a highlight shoulder. Black stays black and the curve is monotonic.
+- All curves end with the same `1/2.2` gamma encoding, and mapping applies only to the `ColorChannel` — Variance, Standard Deviation and Samples channels are unaffected.
+- NaN/Inf pixel values and invalid parameters are sanitized, so no non-finite value can reach the PNG; accumulated buffer data is never modified.
+
+You can also map any buffer directly without a renderer:
+
+```go
+im := buffer.ImageWithToneMapping(ColorChannel, ToneMapping{ACESToneMapper, 1.0})
+```
 
 ### Adaptive Sampling
 

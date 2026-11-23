@@ -82,6 +82,19 @@ func (b *Buffer) StandardDeviation(x, y int) Color {
 }
 
 func (b *Buffer) Image(channel Channel) image.Image {
+	return b.ImageWithToneMapping(channel, NewToneMapping())
+}
+
+// ImageWithToneMapping renders the requested channel as an image. Tone
+// mapping only affects the ColorChannel; Variance, StandardDeviation and
+// Samples channels are produced exactly as in Image.
+//
+// The buffer's accumulated pixel data is never modified. Invalid tone
+// mapping parameters are replaced with the gamma defaults and any non-finite
+// pixel values are sanitized, so the resulting image never contains NaN or
+// Inf values.
+func (b *Buffer) ImageWithToneMapping(channel Channel, mapping ToneMapping) image.Image {
+	mapping = mapping.normalized()
 	result := image.NewRGBA64(image.Rect(0, 0, b.W, b.H))
 	var maxSamples float64
 	if channel == SamplesChannel {
@@ -94,13 +107,16 @@ func (b *Buffer) Image(channel Channel) image.Image {
 			var c Color
 			switch channel {
 			case ColorChannel:
-				c = b.Pixels[y*b.W+x].Color().Pow(1 / 2.2)
+				c = mapping.apply(b.Pixels[y*b.W+x].Color())
 			case VarianceChannel:
 				c = b.Pixels[y*b.W+x].Variance()
 			case StandardDeviationChannel:
 				c = b.Pixels[y*b.W+x].StandardDeviation()
 			case SamplesChannel:
-				p := float64(b.Pixels[y*b.W+x].Samples) / maxSamples
+				p := 0.0
+				if maxSamples > 0 {
+					p = float64(b.Pixels[y*b.W+x].Samples) / maxSamples
+				}
 				c = Color{p, p, p}
 			}
 			result.SetRGBA64(x, y, c.RGBA64())

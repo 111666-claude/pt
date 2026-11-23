@@ -23,6 +23,7 @@ type Renderer struct {
 	AdaptiveExponent   float64
 	FireflySamples     int
 	FireflyThreshold   float64
+	ToneMapping        ToneMapping
 	NumCPU             int
 	Verbose            bool
 }
@@ -40,6 +41,7 @@ func NewRenderer(scene *Scene, camera *Camera, sampler Sampler, w, h int) *Rende
 	r.AdaptiveExponent = 1
 	r.FireflySamples = 0
 	r.FireflyThreshold = 1
+	r.ToneMapping = NewToneMapping()
 	r.NumCPU = runtime.NumCPU()
 	r.Verbose = true
 	return &r
@@ -151,9 +153,9 @@ func (r *Renderer) showProgress(start time.Time, rays uint64, i, h int) {
 	fmt.Printf("] %s %s ", DurationString(elapsed), NumberString(rps))
 }
 
-func (r *Renderer) writeImage(path string, buf *Buffer, channel Channel, wg *sync.WaitGroup) {
+func (r *Renderer) writeImage(path string, buf *Buffer, channel Channel, mapping ToneMapping, wg *sync.WaitGroup) {
 	defer wg.Done()
-	im := buf.Image(channel)
+	im := buf.ImageWithToneMapping(channel, mapping)
 	if err := SavePNG(path, im); err != nil {
 		panic(err)
 	}
@@ -161,7 +163,7 @@ func (r *Renderer) writeImage(path string, buf *Buffer, channel Channel, wg *syn
 
 func (r *Renderer) Render() image.Image {
 	r.run()
-	return r.Buffer.Image(ColorChannel)
+	return r.Buffer.ImageWithToneMapping(ColorChannel, r.ToneMapping)
 }
 
 func (r *Renderer) IterativeRender(pathTemplate string, iterations int) image.Image {
@@ -175,14 +177,14 @@ func (r *Renderer) IterativeRender(pathTemplate string, iterations int) image.Im
 		}
 		buf := r.Buffer.Copy()
 		wg.Add(1)
-		go r.writeImage(path, buf, ColorChannel, &wg)
+		go r.writeImage(path, buf, ColorChannel, r.ToneMapping, &wg)
 		// wg.Add(1)
 		// go r.writeImage("deviation.png", buf, StandardDeviationChannel, &wg)
 		// wg.Add(1)
 		// go r.writeImage("samples.png", buf, SamplesChannel, &wg)
 	}
 	wg.Wait()
-	return r.Buffer.Image(ColorChannel)
+	return r.Buffer.ImageWithToneMapping(ColorChannel, r.ToneMapping)
 }
 
 func (r *Renderer) ChannelRender() <-chan image.Image {
@@ -190,7 +192,7 @@ func (r *Renderer) ChannelRender() <-chan image.Image {
 	go func() {
 		for i := 1; ; i++ {
 			r.run()
-			ch <- r.Buffer.Image(ColorChannel)
+			ch <- r.Buffer.ImageWithToneMapping(ColorChannel, r.ToneMapping)
 		}
 	}()
 	return ch
@@ -202,7 +204,7 @@ func (r *Renderer) FrameRender(path string, iterations int, wg *sync.WaitGroup) 
 	}
 	buf := r.Buffer.Copy()
 	wg.Add(1)
-	go r.writeImage(path, buf, ColorChannel, wg)
+	go r.writeImage(path, buf, ColorChannel, r.ToneMapping, wg)
 }
 
 func (r *Renderer) TimedRender(duration time.Duration) image.Image {
@@ -213,5 +215,5 @@ func (r *Renderer) TimedRender(duration time.Duration) image.Image {
 			break
 		}
 	}
-	return r.Buffer.Image(ColorChannel)
+	return r.Buffer.ImageWithToneMapping(ColorChannel, r.ToneMapping)
 }

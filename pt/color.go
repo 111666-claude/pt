@@ -80,10 +80,25 @@ func (a Color) RGBA() color.RGBA {
 }
 
 func (a Color) RGBA64() color.RGBA64 {
-	r := uint16(math.Max(0, math.Min(65535, a.R*65535)))
-	g := uint16(math.Max(0, math.Min(65535, a.G*65535)))
-	b := uint16(math.Max(0, math.Min(65535, a.B*65535)))
-	return color.RGBA64{r, g, b, 65535}
+	return color.RGBA64{
+		colorChannel16(a.R),
+		colorChannel16(a.G),
+		colorChannel16(a.B),
+		65535,
+	}
+}
+
+// colorChannel14 converts a linear display value in [0, 1] to a 16-bit
+// channel, clamping out-of-range values and mapping non-finite values to
+// zero so NaN and Inf never propagate to encoded images.
+func colorChannel16(x float64) uint16 {
+	if math.IsNaN(x) || math.IsInf(x, 0) || x <= 0 {
+		return 0
+	}
+	if x >= 1 {
+		return 65535
+	}
+	return uint16(x * 65535)
 }
 
 func (a Color) Add(b Color) Color {
