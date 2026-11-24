@@ -23,7 +23,19 @@ func (s *Scene) Compile() {
 
 func (s *Scene) Add(shape Shape) {
 	s.Shapes = append(s.Shapes, shape)
-	if shape.MaterialAt(Vector{}).Emittance > 0 {
+	// area lights decide themselves whether they carry any emissive
+	// surface: Mesh.MaterialAt is unimplemented, so emittance must be
+	// queried through the area distribution instead of MaterialAt.
+	if area, ok := shape.(AreaLight); ok {
+		if area.LightArea() > 0 {
+			s.Lights = append(s.Lights, shape)
+		}
+		return
+	}
+	// other shapes (sphere, cube fallback, plane, ...): only positive,
+	// finite emittance makes them a light. Negative emittance has no
+	// physical meaning and is treated as non-emissive.
+	if shapeEmittance(shape) > 0 {
 		s.Lights = append(s.Lights, shape)
 	}
 }

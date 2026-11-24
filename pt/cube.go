@@ -1,17 +1,22 @@
 package pt
 
-import "math"
+import (
+	"math"
+	"sync"
+)
 
 type Cube struct {
-	Min      Vector
-	Max      Vector
-	Material Material
-	Box      Box
+	Min            Vector
+	Max            Vector
+	Material       Material
+	Box            Box
+	lightOnce      sync.Once
+	lightMeshCache *Mesh
 }
 
 func NewCube(min, max Vector, material Material) *Cube {
 	box := Box{min, max}
-	return &Cube{min, max, material, box}
+	return &Cube{Min: min, Max: max, Material: material, Box: box}
 }
 
 func (c *Cube) Compile() {

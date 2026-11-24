@@ -36,6 +36,10 @@ func (a Vector) Length() float64 {
 	return math.Sqrt(a.X*a.X + a.Y*a.Y + a.Z*a.Z)
 }
 
+func (a Vector) LengthSquared() float64 {
+	return a.X*a.X + a.Y*a.Y + a.Z*a.Z
+}
+
 func (a Vector) LengthN(n float64) float64 {
 	if n == 2 {
 		return a.Length()

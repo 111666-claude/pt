@@ -6,15 +6,21 @@ type Mesh struct {
 	Triangles []*Triangle
 	box       *Box
 	tree      *Tree
+	// area-weighted sampling distribution over the emissive triangles
+	lightDirty     bool
+	lightTriangles []lightTriangle
+	lightArea      float64
+	lightCentroid  Vector
 }
 
 func NewMesh(triangles []*Triangle) *Mesh {
-	return &Mesh{triangles, nil, nil}
+	return &Mesh{triangles, nil, nil, true, nil, 0, Vector{}}
 }
 
 func (m *Mesh) dirty() {
 	m.box = nil
 	m.tree = nil
+	m.lightDirty = true
 }
 
 func (m *Mesh) Copy() *Mesh {
@@ -34,6 +40,9 @@ func (m *Mesh) Compile() {
 		}
 		m.tree = NewTree(shapes)
 	}
+	// build the emissive sampling distribution up front so that concurrent
+	// render goroutines never race on the lazy buildLightDistribution path
+	m.ensureLightDistribution()
 }
 
 func (a *Mesh) Add(b *Mesh) {

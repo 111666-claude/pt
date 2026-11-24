@@ -64,6 +64,8 @@ func (s *DefaultSampler) sample(scene *Scene, ray Ray, emission bool, samples, d
 	info := hit.Info(ray)
 	material := info.Material
 	result := Black
+	// negative or NaN emittance is physically invalid: the surface is
+	// treated as non-emissive rather than subtracting energy
 	if material.Emittance > 0 {
 		if s.DirectLighting && !emission {
 			return Black
@@ -141,6 +143,92 @@ func (s *DefaultSampler) sampleLights(scene *Scene, n Ray, rnd *rand.Rand) Color
 }
 
 func (s *DefaultSampler) sampleLight(scene *Scene, n Ray, rnd *rand.Rand, light Shape) Color {
+	if area, ok := light.(AreaLight); ok {
+		return s.sampleAreaLight(scene, n, rnd, light, area)
+	}
+	return s.sampleSphericalLight(scene, n, rnd, light)
+}
+
+// sampleAreaLight implements direct lighting for triangle, mesh and cube
+// lights using the surface-area formulation:
+//
+//	L_e * cos(theta_o) * |cos(theta_l)| / (r^2 * pdf)
+//
+// The PDF is a normalized area-measure density, so the estimator is unbiased
+// and energy conserving for any tessellation of the emissive surface.
+func (s *DefaultSampler) sampleAreaLight(scene *Scene, n Ray, rnd *rand.Rand, light Shape, area AreaLight) Color {
+	sample := area.SampleLight(n.Origin, s.SoftShadows, rnd)
+	if sample.PDF <= 0 || sample.R2 <= 0 {
+		// zero-area / degenerate light, or a sample on top of the shading point
+		return Black
+	}
+
+	// direction from the shading point toward the sampled light point
+	toLight := sample.Point.Sub(n.Origin)
+	distance := math.Sqrt(sample.R2)
+	ray := Ray{n.Origin, toLight.DivScalar(distance)}
+
+	// cosine on the receiver side: the light must face the shading normal
+	diffuse := ray.Direction.Dot(n.Direction)
+	if diffuse <= 0 {
+		return Black
+	}
+
+	// cosine on the light side. Lights in this engine are two-sided, so the
+	// absolute value is used: a back-facing emitting triangle still lights
+	// points behind it, matching how emissive surfaces are rendered directly.
+	lightCosine := math.Abs(ray.Direction.Dot(sample.Normal))
+	if lightCosine <= 0 {
+		return Black
+	}
+
+	// visibility: the first surface hit along the shadow ray must be at or
+	// beyond the sampled light point. A small ray-offset keeps the receiver
+	// from shadowing itself; a relative tolerance absorbs floating-point
+	// rounding between the Moller-Trumbore hit distance and the sampled
+	// point distance (they can differ by ~1e-16 on the light surface).
+	bias := shadowBias(n.Origin)
+	shadowOrigin := n.Origin.Add(ray.Direction.MulScalar(bias))
+	shadowRay := Ray{shadowOrigin, ray.Direction}
+	hit := scene.Intersect(shadowRay)
+	if !hit.Ok() {
+		return Black
+	}
+	tolerance := shadowTolerance * distance
+	if hit.T < distance-bias-tolerance {
+		return Black
+	}
+
+	// negative emittance contributes nothing; MaterialAt honors textures
+	material := sample.Material
+	emittance := math.Max(0, material.Emittance)
+	if emittance == 0 {
+		return Black
+	}
+	weight := emittance * diffuse * lightCosine / (sample.R2 * sample.PDF)
+	return material.Color.MulScalar(weight)
+}
+
+// shadowTolerance is the relative distance slack used when comparing a
+// shadow ray's hit distance with the sampled light distance.
+const shadowTolerance = 1e-7
+
+// shadowBias returns a small distance offset proportional to the scene scale
+// at the given position, used to avoid shadow-ray self-intersection.
+func shadowBias(p Vector) float64 {
+	scale := math.Abs(p.X)
+	if math.Abs(p.Y) > scale {
+		scale = math.Abs(p.Y)
+	}
+	if math.Abs(p.Z) > scale {
+		scale = math.Abs(p.Z)
+	}
+	return math.Max(EPS, scale*EPS)
+}
+
+// sampleSphericalLight keeps the original bounding-disk / solid-angle
+// approximation for sphere lights and any other non-area light shapes.
+func (s *DefaultSampler) sampleSphericalLight(scene *Scene, n Ray, rnd *rand.Rand, light Shape) Color {
 	// get bounding sphere center and radius
 	var center Vector
 	var radius float64
@@ -206,6 +294,9 @@ func (s *DefaultSampler) sampleLight(scene *Scene, n Ray, rnd *rand.Rand, light 
 
 	// get material properties from light
 	material := MaterialAt(light, point)
+	if material.Emittance <= 0 {
+		return Black
+	}
 
 	// combine factors
 	m := material.Emittance * diffuse * coverage
