@@ -111,6 +111,17 @@ func Render(scene *Scene, camera *Camera, sampler Sampler, w, h, samplesPerPixel
 	return buf.Image(ColorChannel)
 }
 
+// RenderInto renders one frame into the provided buffer without allocating a
+// new one. The buffer must already have the requested dimensions. It enables
+// exact sample-budget comparisons, e.g. against a temporally accumulated
+// buffer produced from the same total number of samples.
+func RenderInto(scene *Scene, camera *Camera, sampler Sampler, w, h, samplesPerPixel int, buf *Buffer) {
+	if buf == nil || buf.W != w || buf.H != h {
+		panic(fmt.Sprintf("RenderInto: nil buffer or size mismatch (want %dx%d)", w, h))
+	}
+	render(scene, camera, sampler, samplesPerPixel, buf)
+}
+
 func IterativeRender(pathTemplate string, iterations int, scene *Scene, camera *Camera, sampler Sampler, w, h, samplesPerPixel int) image.Image {
 	var wg sync.WaitGroup
 	scene.Compile()
